@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>What’s wrong?</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, , maximum-scale=1.0">
+</head>
+<body>
+<div id="app">
+    <nav style="float: right">
+        <button v-if="whatsWrong.length" v-on:click="download">Download</button>
+        <a href="/about">/about</a>
+    </nav>
+    <whats-wrong-form :initial-value="whatsWrong"
+                      :allowed-submit="!whys.length"
+                      v-on:change="updateWhatsWrong($event)"
+                      v-on:submit="addWhy"></whats-wrong-form>
+    <why-form v-for="(value, index) in whys"
+              :initial-value="value.answer"
+              :question="value.question"
+              :i="index"
+              :allowed-submit="index == (whys.length-1) && tackle === null"
+              :key="index"
+              v-on:change="updateWhy(index, $event)"
+              v-on:submit="showTackle"
+              v-on:ask-why="addWhy"
+              v-on:cancel="removeWhy($event)"></why-form>
+    <tackle-form v-if="tackle !== null"
+                 :initial-value="tackle"
+                 :solved="solved"
+                 v-on:change="updateTackle($event)"
+                 v-on:submit="markSolved"
+                 v-on:cancel="hideTackle"></tackle-form>
+    <h2 v-if="solved">Great! Now get to work!</h2>
+    <button v-if="solved" v-on:click="unsolve">Wait, there seems to be a problem...</button>
+</div>
+</body>
+<style>
+    body, textarea {
+        font-family: -apple-system, BlinkMacSystemFont, “Segoe UI”, Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 300;
+    }
+
+    h1, h2 {
+        font-weight: 400;
+    }
+
+    nav > a {
+        font-size: large;
+    }
+
+    button {
+        font-size: larger;
+        margin-top: 0.3em;
+    }
+
+    textarea {
+        border: none;
+        width: 100%;
+        font-size: large;
+        min-height: 2rem;
+        overflow-y: auto;
+        word-wrap: break-word;
+    }
+
+    @supports (-webkit-overflow-scrolling: touch) {
+        /* CSS specific to iOS devices */
+        textarea {
+            width: 95%;
+        }
+    }
+
+</style>
+<script src="/vue@2.6.12.js"></script>
+<script type="application/javascript">
+
+    function randomWhy() {
+        const items = ['Why?', 'Why is that?', 'How come?', 'Why is it true?'];
+        return items[Math.floor(Math.random() * items.length)];
+    }
+
+    Vue.component('whats-wrong-form', {
+        props: ['initialValue', 'allowedSubmit'],
+        template: `
+        <form v-on:submit.prevent="submit">
+            <h1>
+                <label for="whatsup">
+                    What’s wrong?
+                </label>
+            </h1>
+            <textarea id="whatsup" placeholder="Just bring it on"
+                      v-model="value"
+                      v-on:input="change"
+                      v-on:keydown.meta.enter="submit"
+                      ref="textarea"></textarea>
+            <button type="submit" v-if="value.length && allowedSubmit">Done</button>
+        </form>`,
+        data(props) {
+            return {value: props.initialValue}
+        },
+        mounted() {
+            adjustTextAreaHeight(this.$refs['textarea']);
+        },
+        methods: {
+            submit() {
+                if (this.value.length && this.allowedSubmit) {
+                    this.$emit('submit');
+                }
+            },
+            change() {
+                adjustTextAreaHeight(this.$refs['textarea']);
+                this.$emit('change', this.value);
+            }
+        }
+    });
+    Vue.component('why-form', {
+        props: ['initialValue', 'i', 'question', 'allowedSubmit'],
+        template: `
+        <form v-on:submit.prevent="submit">
+            <h2><label :for="'why-' + i">{{question}}</label></h2>
+            <textarea :id="'why-' + i" placeholder="Explain, please"
+                      v-model="value"
+                      v-on:input="change"
+                      v-on:keydown.meta.enter="submit"
+                      ref="textarea"></textarea>
+            <div>
+                <button v-if="allowedSubmit" v-on:click.prevent="$emit('cancel')">Doesn’t make sense</button>
+                <button v-if="value.length && allowedSubmit" v-on:click.prevent="$emit('ask-why')">Ask me why</button>
+                <button v-if="value.length && allowedSubmit" type="submit">I know how to tackle this</button>
+            </div>
+        </form>`,
+        data(props) {
+            return {value: props.initialValue}
+        },
+        mounted() {
+            adjustTextAreaHeight(this.$refs['textarea']);
+        },
+        methods: {
+            submit() {
+                if (this.value.length && this.allowedSubmit) {
+                    this.$emit('submit');
+                }
+            },
+            change() {
+                adjustTextAreaHeight(this.$refs['textarea']);
+                this.$emit('change', this.value);
+            }
+        }
+    });
+
+
+    Vue.component('tackle-form', {
+        props: ['initialValue', 'solved'],
+        template: `
+        <form v-on:submit.prevent="submit">
+            <h2><label for="tackle">What are you going to do?</label></h2>
+            <textarea id="tackle" placeholder="Explain, please"
+                      v-model="value"
+                      v-on:input="change"
+                      v-on:keydown.meta.enter="submit"
+                      ref="textarea"></textarea>
+            <button v-if="!solved" v-on:click.prevent="$emit('cancel')">Doesn’t make sense</button>
+            <button v-if="value.length && !solved" type="submit">Done</button>
+        </form>`,
+        data(props) {
+            return {value: props.initialValue}
+        },
+        mounted() {
+            adjustTextAreaHeight(this.$refs['textarea']);
+        },
+        methods: {
+            submit() {
+                if (this.value.length && !this.solved) {
+                    this.$emit('submit')
+                }
+            },
+            change() {
+                adjustTextAreaHeight(this.$refs['textarea']);
+                this.$emit('change', this.value);
+            }
+        }
+    });
+
+    const initialData = localStorage.whatsWrong ? JSON.parse(localStorage.whatsWrong) : null;
+
+    const app = new Vue({
+        el: '#app',
+        data() {
+            return initialData || {
+                whatsWrong: "",
+                whys: [],
+                tackle: null,
+                solved: false,
+                lastWhyAnswer: ''
+            }
+        },
+        computed: {
+            showDone() {
+                return this.whatsWrong.length && !this.whys.length
+            },
+            showExpandedDone() {
+                return this.lastWhyAnswer.length && this.tackle === null;
+            }
+        },
+        mounted() {
+            if (!this.solved) {
+                focusLastTextField();
+            }
+        },
+        methods: {
+            updateWhy(index, value) {
+                this.whys[index].answer = value;
+                this.storeState();
+                if (index === this.whys.length - 1) {
+                    this.lastWhyAnswer = value;
+                }
+            },
+            updateWhatsWrong(value) {
+                this.whatsWrong = value;
+                this.storeState();
+            },
+            updateTackle(value) {
+                this.tackle = value;
+                this.storeState();
+            },
+            storeState() {
+                const whys = this.whys.filter(item => !!item.answer);
+                localStorage.whatsWrong = JSON.stringify({
+                    whatsWrong: this.whatsWrong,
+                    whys: whys,
+                    tackle: this.tackle,
+                    solved: this.solved,
+                    lastWhyAnswer: whys.length ? whys.slice(-1)[0].answer : '',
+                });
+            },
+            addWhy() {
+                this.whys.push({question: randomWhy(), answer: ''});
+                this.lastWhyAnswer = "";
+                focusLastTextField();
+            },
+            removeWhy(index) {
+                this.whys.splice(index, 1);
+                this.lastWhyAnswer = this.whys.length ? this.whys[this.whys.length - 1].answer : '';
+                focusLastTextField();
+                this.storeState();
+            },
+            showTackle() {
+                this.tackle = "";
+                this.solved = false;
+                focusLastTextField();
+                this.storeState();
+            },
+            hideTackle() {
+                this.tackle = null;
+                this.solved = false;
+                this.storeState();
+            },
+            markSolved() {
+                this.solved = true;
+                this.storeState();
+            },
+            unsolve() {
+                this.solved = false;
+                focusLastTextField();
+                this.storeState();
+            },
+            download() {
+                let text = "";
+                text += "# What’s wrong?\n";
+                text += this.whatsWrong;
+                text += '\n';
+                this.whys.forEach(why => {
+                    text += '\n';
+                    text += "## ";
+                    text += why.question;
+                    text += '\n';
+                    text += why.answer;
+                    text += '\n';
+                });
+                text += '\n';
+                if (this.tackle !== null) {
+                    text += "## What are you going to do?\n";
+                    text += this.tackle;
+                    text += '\n';
+                }
+                download('whats-wrong.md', text)
+            }
+        }
+    });
+
+    function focusLastTextField() {
+        setTimeout(() => {
+            Array.from(document.querySelectorAll('textarea')).slice(-1)[0].focus();
+        }, 5);
+    }
+
+    function adjustTextAreaHeight($el) {
+        $el.style.height = "1px";
+        $el.style.height = $el.scrollHeight + "px";
+    }
+
+    function download(filename, text) {
+        const $el = document.createElement('a');
+        $el.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+        $el.setAttribute('download', filename);
+
+        $el.style.display = 'none';
+        document.body.appendChild($el);
+
+        $el.click();
+
+        document.body.removeChild($el);
+    }
+</script>
+</html>
