@@ -7,8 +7,8 @@
 </head>
 <body>
 <div id="app">
-    <nav style="float: right">
-        <button v-if="whatsWrong.length" v-on:click="download">Download</button>
+    <nav style="float: right" v-bind:style="{'margin-top': whys.length ? '0.6em' : '0.8em'}">
+        <button v-if="whys.length" v-on:click="download" style="margin: 0">Download</button>
         <a href="/about">/about</a>
     </nav>
     <whats-wrong-form :initial-value="whatsWrong"
